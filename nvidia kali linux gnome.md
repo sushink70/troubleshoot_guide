@@ -4810,3 +4810,2698 @@ You should see version information displayed.
 
 That's the simplest and most reliable way. No need for manual repositories or downloads!
 
+Based on your system logs, I can see you're running Kali Linux with GNOME on X11 with an NVIDIA GTX 1650. The boot issues are likely related to the NVIDIA driver and display manager configuration. Here's a comprehensive solution:
+
+## Critical Configuration Changes
+
+### 1. **GRUB Configuration** (Primary Fix)
+Edit `/etc/default/grub`:
+
+```bash
+sudo nano /etc/default/grub
+```
+
+Add/modify these parameters:
+
+```bash
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash nomodeset nouveau.modeset=0 nvidia-drm.modeset=1"
+GRUB_CMDLINE_LINUX="acpi_osi=Linux i915.modeset=1"
+```
+
+Then update GRUB:
+```bash
+sudo update-grub
+```
+
+### 2. **Blacklist Nouveau Driver**
+Create/edit `/etc/modprobe.d/blacklist-nouveau.conf`:
+
+```bash
+sudo nano /etc/modprobe.d/blacklist-nouveau.conf
+```
+
+Add:
+```
+blacklist nouveau
+blacklist lbm-nouveau
+options nouveau modeset=0
+alias nouveau off
+alias lbm-nouveau off
+```
+
+Update initramfs:
+```bash
+sudo update-initramfs -u
+```
+
+### 3. **Configure NVIDIA Prime**
+Your Dell G3 3500 has hybrid graphics (Intel + NVIDIA). Set NVIDIA as primary:
+
+```bash
+sudo prime-select nvidia
+```
+
+### 4. **Create NVIDIA Xorg Configuration**
+```bash
+sudo nvidia-xconfig
+```
+
+Then edit `/etc/X11/xorg.conf` to add:
+
+```
+Section "Device"
+    Identifier     "Device0"
+    Driver         "nvidia"
+    VendorName     "NVIDIA Corporation"
+    Option         "NoLogo" "true"
+    Option         "UseEDID" "true"
+    Option         "ConnectedMonitor" "DFP"
+EndSection
+
+Section "Screen"
+    Identifier     "Screen0"
+    Device         "Device0"
+    Option         "metamodes" "nvidia-auto-select +0+0 {ForceCompositionPipeline=On, ForceFullCompositionPipeline=On}"
+EndSection
+```
+
+### 5. **Optimize GDM3 Configuration**
+Your current config already has Wayland disabled, but ensure `/etc/gdm3/daemon.conf` has:
+
+```ini
+[daemon]
+WaylandEnable=false
+DefaultSession=gnome-xorg.desktop
+
+[security]
+AllowRoot=false
+
+[xdmcp]
+
+[chooser]
+
+[debug]
+Enable=false
+```
+
+### 6. **Disable Problematic GNOME Extensions**
+Based on your logs showing extension conflicts, temporarily disable them:
+
+```bash
+gnome-extensions disable apps-menu@gnome-shell-extensions.gcampax.github.com
+gnome-extensions disable dash-to-dock@micxgx.gmail.com
+gnome-extensions disable ding@rastersoft.com
+```
+
+### 7. **Create NVIDIA Module Loading Configuration**
+Create `/etc/modules-load.d/nvidia.conf`:
+
+```bash
+sudo nano /etc/modules-load.d/nvidia.conf
+```
+
+Add:
+```
+nvidia
+nvidia_modeset
+nvidia_uvm
+nvidia_drm
+```
+
+### 8. **Kernel Parameter Alternative** (If Above Doesn't Work)
+If still experiencing issues, try this more aggressive GRUB config:
+
+```bash
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash nomodeset nvidia-drm.modeset=1 nouveau.modeset=0 rd.driver.blacklist=nouveau video=vesa:off acpi_osi=Linux i915.enable_guc=0"
+```
+
+### 9. **Boot Service Timeout Increase**
+Edit `/etc/systemd/system.conf`:
+
+```bash
+sudo nano /etc/systemd/system.conf
+```
+
+Uncomment and set:
+```
+DefaultTimeoutStartSec=180s
+DefaultTimeoutStopSec=90s
+```
+
+### 10. **Quick Recovery Script**
+Create this script for emergency boot recovery:
+
+```bash
+sudo nano /usr/local/bin/fix-nvidia-boot.sh
+```
+
+```bash
+#!/bin/bash
+# Emergency NVIDIA boot fix
+systemctl stop gdm3
+rmmod nvidia_drm nvidia_modeset nvidia_uvm nvidia
+modprobe nvidia
+modprobe nvidia_modeset
+modprobe nvidia_uvm
+modprobe nvidia_drm
+systemctl start gdm3
+```
+
+Make executable:
+```bash
+sudo chmod +x /usr/local/bin/fix-nvidia-boot.sh
+```
+
+## Complete Setup Sequence
+
+Run these commands in order:
+
+```bash
+# 1. Update system
+sudo apt update && sudo apt upgrade -y
+
+# 2. Ensure NVIDIA drivers are properly installed
+sudo apt install -y nvidia-driver nvidia-settings nvidia-prime
+
+# 3. Apply all configurations above
+
+# 4. Rebuild initramfs
+sudo update-initramfs -u -k all
+
+# 5. Update GRUB
+sudo update-grub
+
+# 6. Reboot
+sudo reboot
+```
+
+## If System Still Hangs at Boot
+
+Press **Shift** during boot to access GRUB menu, then:
+1. Press **'e'** to edit boot parameters
+2. Add `nomodeset` to the linux line
+3. Press **Ctrl+X** to boot
+4. Once logged in, apply the configurations above
+
+## Verification After Boot
+
+```bash
+# Check NVIDIA driver
+nvidia-smi
+
+# Check loaded modules
+lsmod | grep nvidia
+
+# Check display server
+echo $XDG_SESSION_TYPE
+```
+
+The key issue with your Dell G3 3500 is the conflict between Intel integrated graphics, NVIDIA discrete GPU, and the nouveau driver. This configuration forces exclusive NVIDIA usage and prevents boot hangs.
+
+Looking at your previous working configuration, I can see you had a much simpler and cleaner setup. Let me provide you with the **exact configuration that was working** for you:
+
+## Working Configuration for Dell G3 3500
+
+### 1. **GRUB Configuration** (This was your working config)
+Edit `/etc/default/grub`:
+
+```bash
+sudo nano /etc/default/grub
+```
+
+Use these **exact parameters** that worked before:
+
+```bash
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"
+GRUB_CMDLINE_LINUX=""
+```
+
+**Important**: Remove any `nomodeset`, `nouveau.modeset=0`, or `nvidia-drm.modeset=1` parameters. Your system works better WITHOUT these!
+
+Update GRUB:
+```bash
+sudo update-grub
+```
+
+### 2. **GDM3 Configuration** (Keep as is)
+Your current `/etc/gdm3/daemon.conf` is already correct:
+
+```ini
+[daemon]
+WaylandEnable=false
+DefaultSession=gnome-xorg.desktop
+```
+
+This is perfect - don't change it.
+
+### 3. **Blacklist Nouveau** (You had this working)
+Create `/etc/modprobe.d/blacklist-nouveau.conf`:
+
+```bash
+sudo nano /etc/modprobe.d/blacklist-nouveau.conf
+```
+
+Add:
+```
+blacklist nouveau
+options nouveau modeset=0
+```
+
+### 4. **NVIDIA Prime Configuration** (Critical)
+Based on your previous setup, you were using **on-demand mode**:
+
+```bash
+sudo prime-select on-demand
+```
+
+This allows switching between Intel and NVIDIA as needed, which is more stable than forcing NVIDIA-only mode.
+
+### 5. **Remove Any Custom Xorg Configuration**
+If you created `/etc/X11/xorg.conf`, remove or rename it:
+
+```bash
+sudo mv /etc/X11/xorg.conf /etc/X11/xorg.conf.backup
+```
+
+Your system works better with **auto-detection** rather than forced configuration.
+
+### 6. **Kernel Modules Configuration**
+Your loaded modules show NVIDIA is loading correctly. Ensure `/etc/modules-load.d/modules.conf` contains:
+
+```bash
+sudo nano /etc/modules-load.d/modules.conf
+```
+
+Just add:
+```
+nvidia
+nvidia_modeset
+nvidia_uvm
+nvidia_drm
+```
+
+### 7. **Update Initramfs**
+After making changes:
+
+```bash
+sudo update-initramfs -u
+```
+
+## Complete Restoration Steps
+
+Here's the exact sequence to restore your working configuration:
+
+```bash
+# 1. Backup current config
+sudo cp /etc/default/grub /etc/default/grub.backup
+
+# 2. Edit GRUB - set to simple config
+sudo nano /etc/default/grub
+# Set: GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"
+# Set: GRUB_CMDLINE_LINUX=""
+
+# 3. Update GRUB
+sudo update-grub
+
+# 4. Set Prime to on-demand
+sudo prime-select on-demand
+
+# 5. Remove custom Xorg config if exists
+sudo mv /etc/X11/xorg.conf /etc/X11/xorg.conf.backup 2>/dev/null
+
+# 6. Ensure nouveau is blacklisted
+echo "blacklist nouveau" | sudo tee /etc/modprobe.d/blacklist-nouveau.conf
+echo "options nouveau modeset=0" | sudo tee -a /etc/modprobe.d/blacklist-nouveau.conf
+
+# 7. Update initramfs
+sudo update-initramfs -u
+
+# 8. Reboot
+sudo reboot
+```
+
+## Key Differences from My Previous Suggestion
+
+Your working configuration had:
+- ✅ **Simple GRUB parameters** (just `quiet splash`)
+- ✅ **Prime on-demand mode** (not forced NVIDIA)
+- ✅ **No custom Xorg configuration** (auto-detection)
+- ✅ **Minimal kernel parameters**
+
+This is actually **more stable** for hybrid graphics laptops like the Dell G3 3500.
+
+## If You Still Experience Boot Hangs
+
+The issue might be with GNOME extensions. From your logs, I see conflicts with multiple extensions. Disable them temporarily:
+
+```bash
+# Disable problematic extensions
+gsettings set org.gnome.shell disable-user-extensions true
+```
+
+After successful boot, you can re-enable them one by one:
+
+```bash
+gsettings set org.gnome.shell disable-user-extensions false
+```
+
+## Verification Commands
+
+After reboot, verify everything is working:
+
+```bash
+# Check prime mode
+prime-select query
+
+# Check NVIDIA driver
+nvidia-smi
+
+# Check display server
+echo $XDG_SESSION_TYPE  # Should show x11
+
+# Check loaded modules
+lsmod | grep nvidia
+```
+
+This simpler configuration should prevent boot hangs. The key insight is that your Dell G3 3500 with hybrid graphics works **better with less forced configuration** rather than aggressive NVIDIA-only settings.
+
+Your current `/etc/X11/xorg.conf` is **NOT optimal** for your Dell G3 3500 hybrid graphics setup. Based on your previous working configuration, you should **remove or rename this file** because:
+
+## Problems with Current xorg.conf:
+
+1. **Forces NVIDIA-only mode** - No Intel GPU fallback
+2. **Hard-coded BusID** - Can cause issues with Prime switching
+3. **Missing critical options** for hybrid graphics
+4. **No composition pipeline** - Can cause screen tearing
+5. **Old-style input device definitions** - Modern systems use libinput
+
+## Recommended Action:
+
+**Remove this file** and let the system auto-detect (this matched your working config):
+
+```bash
+sudo mv /etc/X11/xorg.conf /etc/X11/xorg.conf.backup
+```
+
+Then reboot:
+```bash
+sudo reboot
+```
+
+---
+
+## Alternative: If You Must Use xorg.conf
+
+If auto-detection doesn't work and you need an xorg.conf, use this **optimized version** instead:
+
+```bash
+sudo nano /etc/X11/xorg.conf
+```
+
+Replace with:
+
+```conf
+Section "ServerLayout"
+    Identifier     "Layout0"
+    Screen      0  "Screen0" 0 0
+    Option         "AllowNVIDIAGPUScreens"
+EndSection
+
+Section "Files"
+EndSection
+
+Section "Monitor"
+    Identifier     "Monitor0"
+    VendorName     "Unknown"
+    ModelName      "Unknown"
+    Option         "DPMS"
+EndSection
+
+Section "Device"
+    Identifier     "Device0"
+    Driver         "nvidia"
+    VendorName     "NVIDIA Corporation"
+    BoardName      "GeForce GTX 1650"
+    BusID          "PCI:1:0:0"
+    Option         "NoLogo" "true"
+    Option         "AllowEmptyInitialConfiguration"
+    Option         "PrimaryGPU" "no"
+    Option         "AllowExternalGpus" "true"
+EndSection
+
+Section "Device"
+    Identifier     "IntelGPU"
+    Driver         "modesetting"
+    BusID          "PCI:0:2:0"
+    Option         "AccelMethod" "glamor"
+    Option         "DRI" "3"
+EndSection
+
+Section "Screen"
+    Identifier     "Screen0"
+    Device         "Device0"
+    Monitor        "Monitor0"
+    DefaultDepth    24
+    Option         "AllowIndirectGLXProtocol" "off"
+    Option         "TripleBuffer" "on"
+    Option         "metamodes" "nvidia-auto-select +0+0 { ForceFullCompositionPipeline = On }"
+    SubSection     "Display"
+        Depth       24
+    EndSubSection
+EndSection
+```
+
+---
+
+## My Strong Recommendation:
+
+**Delete the xorg.conf file entirely.** Here's why:
+
+Your previous working setup (from the shared link) had:
+- ✅ **No custom xorg.conf**
+- ✅ Automatic GPU detection
+- ✅ Prime on-demand mode working perfectly
+- ✅ Both Intel and NVIDIA GPUs available
+
+The current xorg.conf is **forcing NVIDIA-only mode**, which causes:
+- ❌ Boot hangs
+- ❌ Prime switching issues  
+- ❌ Display manager problems
+- ❌ No fallback to Intel GPU
+
+## Execute This Now:
+
+```bash
+# Backup current xorg.conf
+sudo mv /etc/X11/xorg.conf /etc/X11/xorg.conf.backup
+
+# Verify GRUB is set to simple config
+sudo nano /etc/default/grub
+# Should have: GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"
+
+# Update GRUB
+sudo update-grub
+
+# Set Prime to on-demand (your working mode)
+sudo prime-select on-demand
+
+# Update initramfs
+sudo update-initramfs -u
+
+# Reboot
+sudo reboot
+```
+
+After reboot, verify:
+```bash
+# Check Prime mode
+prime-select query  # Should show: on-demand
+
+# Check if both GPUs are available
+lspci | grep -E "VGA|3D"
+
+# Check NVIDIA is working
+nvidia-smi
+```
+
+**Bottom line**: Your system works better **WITHOUT** the xorg.conf file. Let the system auto-detect your hybrid graphics setup.
+
+The `prime-select` command is not installed. Let's install it and set up proper NVIDIA Prime support:
+
+## Install NVIDIA Prime
+
+```bash
+# Install nvidia-prime package
+sudo apt update
+sudo apt install -y nvidia-prime
+
+# Verify installation
+which prime-select
+```
+
+## Check Current Prime Status
+
+After installation:
+
+```bash
+# Check what mode you're in
+sudo prime-select query
+
+# List available options
+prime-select
+```
+
+## Set to On-Demand Mode
+
+```bash
+sudo prime-select on-demand
+```
+
+---
+
+## Alternative: If nvidia-prime is Not Available in Kali Repos
+
+If the package isn't available, you can manually configure Prime using these methods:
+
+### Method 1: Using nvidia-settings GUI
+
+```bash
+# Launch NVIDIA Settings
+nvidia-settings
+
+# Go to: PRIME Profiles → Select "NVIDIA On-Demand"
+```
+
+### Method 2: Manual Configuration (If prime-select doesn't work)
+
+Create this configuration file:
+
+```bash
+sudo nano /usr/share/X11/xorg.conf.d/10-nvidia-prime.conf
+```
+
+Add:
+
+```conf
+Section "OutputClass"
+    Identifier "nvidia"
+    MatchDriver "nvidia-drm"
+    Driver "nvidia"
+    Option "AllowEmptyInitialConfiguration"
+    Option "PrimaryGPU" "no"
+    ModulePath "/usr/lib/x86_64-linux-gnu/nvidia/xorg"
+EndSection
+
+Section "ServerLayout"
+    Identifier "layout"
+    Option "AllowNVIDIAGPUScreens"
+EndSection
+```
+
+---
+
+## For Now: Remove xorg.conf and Use Auto-Detection
+
+Since you don't have `prime-select` working yet, do this:
+
+```bash
+# 1. Backup and remove the forced NVIDIA xorg.conf
+sudo mv /etc/X11/xorg.conf /etc/X11/xorg.conf.backup
+
+# 2. Install nvidia-prime
+sudo apt update
+sudo apt install -y nvidia-prime nvidia-settings
+
+# 3. Check if you have the nvidia-prime package files
+dpkg -L nvidia-prime
+
+# 4. If prime-select still doesn't work, create manual config
+sudo nano /usr/share/X11/xorg.conf.d/10-nvidia-prime.conf
+```
+
+Add this to `10-nvidia-prime.conf`:
+
+```conf
+Section "OutputClass"
+    Identifier "intel"
+    MatchDriver "i915"
+    Driver "modesetting"
+    Option "PrimaryGPU" "yes"
+EndSection
+
+Section "OutputClass"
+    Identifier "nvidia"
+    MatchDriver "nvidia-drm"
+    Driver "nvidia"
+    Option "AllowEmptyInitialConfiguration"
+    Option "PrimaryGPU" "no"
+    ModulePath "/usr/lib/x86_64-linux-gnu/nvidia/xorg"
+EndSection
+```
+
+## Alternative Check: See What's Already Configured
+
+```bash
+# Check if Prime is already configured differently in Kali
+ls -la /etc/X11/xorg.conf.d/
+ls -la /usr/share/X11/xorg.conf.d/
+
+# Check for existing Prime configurations
+cat /usr/share/X11/xorg.conf.d/* 2>/dev/null | grep -i prime
+```
+
+## Simplified Setup Without prime-select
+
+If `prime-select` won't install, just do this:
+
+```bash
+# 1. Remove the forced NVIDIA config
+sudo mv /etc/X11/xorg.conf /etc/X11/xorg.conf.backup
+
+# 2. Create proper hybrid graphics config
+sudo mkdir -p /usr/share/X11/xorg.conf.d/
+
+sudo tee /usr/share/X11/xorg.conf.d/10-nvidia-drm-outputclass.conf << 'EOF'
+Section "OutputClass"
+    Identifier "nvidia"
+    MatchDriver "nvidia-drm"
+    Driver "nvidia"
+    Option "AllowEmptyInitialConfiguration"
+    Option "PrimaryGPU" "no"
+    ModulePath "/usr/lib/x86_64-linux-gnu/nvidia/xorg"
+EndSection
+EOF
+
+# 3. Update initramfs
+sudo update-initramfs -u
+
+# 4. Reboot
+sudo reboot
+```
+
+After reboot, check what's running:
+
+```bash
+# Check which GPU is driving the display
+glxinfo | grep "OpenGL renderer"
+
+# Check NVIDIA status
+nvidia-smi
+
+# Check loaded drivers
+lsmod | grep -E "nvidia|i915"
+```
+
+This setup will:
+- Use Intel GPU for desktop (primary)
+- Make NVIDIA available for applications that need it
+- Prevent boot hangs
+- Allow both GPUs to work in hybrid mode
+
+**Try installing `nvidia-prime` first, and if that doesn't work, use the manual configuration method above.**
+
+I'll help you stabilize your system and check the configuration. Let me fetch the shared conversation first to see what we're working with.I couldn't fetch the shared link, but I can help you stabilize your NVIDIA/Intel hybrid graphics system. Let me provide a comprehensive solution:
+
+## 1. Check Current Configuration
+
+First, let's verify what's currently configured:
+
+```bash
+# Check which GPU is active
+prime-select query
+
+# Check NVIDIA driver status
+nvidia-smi
+
+# Check loaded kernel modules
+lsmod | grep -E "nvidia|nouveau|i915"
+
+# Check Xorg configuration
+ls -la /etc/X11/xorg.conf.d/
+cat /etc/X11/xorg.conf 2>/dev/null
+
+# Check boot parameters
+cat /proc/cmdline
+
+# Check systemd services
+systemctl status display-manager
+journalctl -b -p err  # Check boot errors
+```
+
+## 2. Proper NVIDIA Configuration (Primary GPU)
+
+Create or modify the Xorg configuration:
+
+```bash
+sudo nano /etc/X11/xorg.conf.d/10-nvidia.conf
+```
+
+Add this content:
+
+```
+Section "Module"
+    Load "modesetting"
+EndSection
+
+Section "Device"
+    Identifier "nvidia"
+    Driver "nvidia"
+    BusID "PCI:1:0:0"  # Adjust based on lspci output
+    Option "AllowEmptyInitialConfiguration"
+    Option "PrimaryGPU" "yes"
+EndSection
+```
+
+## 3. Set NVIDIA as Primary
+
+```bash
+# Use NVIDIA by default
+sudo prime-select nvidia
+
+# Configure for on-demand switching (optional)
+# sudo prime-select on-demand
+```
+
+## 4. Add Kernel Parameters for Stability
+
+Edit GRUB configuration:
+
+```bash
+sudo nano /etc/default/grub
+```
+
+Modify the `GRUB_CMDLINE_LINUX_DEFAULT` line:
+
+```
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash nvidia-drm.modeset=1 nouveau.modeset=0"
+```
+
+Update GRUB:
+
+```bash
+sudo update-grub
+```
+
+## 5. Blacklist Nouveau (Prevent Conflicts)
+
+```bash
+sudo nano /etc/modprobe.d/blacklist-nouveau.conf
+```
+
+Add:
+
+```
+blacklist nouveau
+options nouveau modeset=0
+```
+
+Update initramfs:
+
+```bash
+sudo update-initramfs -u
+```
+
+## 6. Configure Intel as Fallback (Critical Situations Only)
+
+Create a fallback script:
+
+```bash
+sudo nano /usr/local/bin/gpu-fallback.sh
+```
+
+```bash
+#!/bin/bash
+# GPU Fallback Script
+
+if ! nvidia-smi &>/dev/null; then
+    echo "NVIDIA GPU failed, switching to Intel..."
+    prime-select intel
+    systemctl restart display-manager
+fi
+```
+
+Make it executable:
+
+```bash
+sudo chmod +x /usr/local/bin/gpu-fallback.sh
+```
+
+Create a systemd service (optional):
+
+```bash
+sudo nano /etc/systemd/system/gpu-fallback.service
+```
+
+```
+[Unit]
+Description=GPU Fallback Service
+Before=display-manager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/gpu-fallback.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+```
+
+## 7. Verify NVIDIA Driver Installation
+
+```bash
+# Check installed NVIDIA packages
+dpkg -l | grep nvidia
+
+# Reinstall if needed (replace 535 with your version)
+sudo apt install --reinstall nvidia-driver-535
+
+# Or install recommended driver
+sudo ubuntu-drivers autoinstall
+```
+
+## 8. Check for Hardware Issues
+
+```bash
+# Monitor GPU temperature and status
+watch -n 1 nvidia-smi
+
+# Check dmesg for GPU errors
+dmesg | grep -i nvidia
+dmesg | grep -i "error\|fail"
+
+# Check system logs
+journalctl -xe | grep -i nvidia
+```
+
+## 9. GNOME-Specific Settings
+
+```bash
+# Disable Wayland (use X11 for better NVIDIA compatibility)
+sudo nano /etc/gdm3/custom.conf
+```
+
+Uncomment:
+
+```
+WaylandEnable=false
+```
+
+## 10. Complete System Check Script
+
+Save this as `check-gpu-config.sh`:
+
+```bash
+#!/bin/bash
+
+echo "=== GPU Configuration Check ==="
+echo ""
+
+echo "1. Active GPU:"
+prime-select query
+echo ""
+
+echo "2. NVIDIA Driver Status:"
+nvidia-smi --query-gpu=name,driver_version,temperature.gpu --format=csv,noheader 2>/dev/null || echo "NVIDIA driver not responding"
+echo ""
+
+echo "3. Loaded Modules:"
+lsmod | grep -E "nvidia|nouveau|i915"
+echo ""
+
+echo "4. PCI Devices:"
+lspci | grep -E "VGA|3D"
+echo ""
+
+echo "5. Xorg Configuration:"
+ls -la /etc/X11/xorg.conf.d/ 2>/dev/null
+echo ""
+
+echo "6. Boot Parameters:"
+cat /proc/cmdline
+echo ""
+
+echo "7. Recent GPU Errors:"
+journalctl -b | grep -i "nvidia\|gpu" | grep -i "error\|fail" | tail -10
+```
+
+Make it executable and run:
+
+```bash
+chmod +x check-gpu-config.sh
+./check-gpu-config.sh
+```
+
+## Recommended Steps in Order:
+
+1. Run the configuration check script
+2. Ensure nouveau is blacklisted
+3. Configure NVIDIA as primary in Xorg
+4. Add kernel parameters and update GRUB
+5. Disable Wayland in GDM
+6. Reboot and test
+7. Monitor system logs for any errors
+
+Share the output of the check script if you need help interpreting the results!
+
+Good news! Your NVIDIA driver (580.95.05) is properly installed and working. The system is currently stable with NVIDIA as the active GPU. Let me analyze what I see and provide a comprehensive stability solution.
+
+## Current Status Analysis
+
+**✅ Working correctly:**
+- NVIDIA driver 580.95.05 is loaded and functioning
+- GPU detected: Connected to DELL S2722QC monitor at 4K (3840x2160)
+- No critical NVIDIA errors in logs
+- Xorg is using NVIDIA successfully
+
+**⚠️ Minor issues (not causing instability):**
+- AppArmor is blocking some NVIDIA file access (cosmetic, being "ALLOWED" anyway)
+- WiFi firmware debug file missing (unrelated to GPU)
+- Kernel module signature warning (normal for proprietary drivers)
+
+## Stabilization Steps
+
+### 1. First, check current GPU configuration
+
+```bash
+# Check if you're using prime-select or similar
+which prime-select
+
+# Check Xorg configuration
+ls -la /etc/X11/xorg.conf.d/
+cat /etc/X11/xorg.conf 2>/dev/null
+
+# Check kernel boot parameters
+cat /proc/cmdline
+
+# Check loaded modules
+lsmod | grep -E "nvidia|nouveau|i915"
+```
+
+### 2. Ensure NVIDIA is persistent and stable
+
+Create or verify NVIDIA persistence service:
+
+```bash
+# Enable NVIDIA persistence daemon (prevents driver unloading)
+sudo systemctl enable nvidia-persistenced
+sudo systemctl start nvidia-persistenced
+sudo systemctl status nvidia-persistenced
+```
+
+### 3. Add optimal kernel parameters
+
+Edit GRUB configuration:
+
+```bash
+sudo nano /etc/default/grub
+```
+
+Modify or add to `GRUB_CMDLINE_LINUX_DEFAULT`:
+
+```bash
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash nvidia-drm.modeset=1 nouveau.modeset=0 nvidia.NVreg_PreserveVideoMemoryAllocations=1"
+```
+
+Then update GRUB:
+
+```bash
+sudo update-grub
+```
+
+**What these parameters do:**
+- `nvidia-drm.modeset=1` - Enables NVIDIA DRM kernel mode setting (more stable)
+- `nouveau.modeset=0` - Disables nouveau (open-source driver)
+- `nvidia.NVreg_PreserveVideoMemoryAllocations=1` - Prevents memory issues (optional)
+
+### 4. Blacklist nouveau permanently
+
+```bash
+sudo nano /etc/modprobe.d/blacklist-nouveau.conf
+```
+
+Add:
+
+```
+blacklist nouveau
+options nouveau modeset=0
+```
+
+Then update initramfs:
+
+```bash
+sudo update-initramfs -u
+```
+
+### 5. Create Xorg configuration for NVIDIA priority
+
+```bash
+sudo mkdir -p /etc/X11/xorg.conf.d/
+sudo nano /etc/X11/xorg.conf.d/10-nvidia-primary.conf
+```
+
+Add this content:
+
+```
+Section "Module"
+    Load "modesetting"
+EndSection
+
+Section "Device"
+    Identifier "NVIDIA GPU"
+    Driver "nvidia"
+    Option "PrimaryGPU" "yes"
+    Option "AllowEmptyInitialConfiguration"
+EndSection
+
+Section "ServerLayout"
+    Identifier "layout"
+    Option "AllowNVIDIAGPUScreens"
+EndSection
+```
+
+### 6. Fix AppArmor denials (optional but recommended)
+
+```bash
+sudo nano /etc/apparmor.d/local/usr.lib.xorg
+```
+
+Add:
+
+```
+# Allow NVIDIA access
+/proc/driver/nvidia/params r,
+/dev/nvidia* rw,
+/dev/nvidiactl rw,
+```
+
+Then reload AppArmor:
+
+```bash
+sudo systemctl reload apparmor
+```
+
+### 7. Create Intel fallback configuration (only for emergencies)
+
+```bash
+sudo nano /etc/X11/xorg.conf.d/20-intel-fallback.conf.disabled
+```
+
+Add:
+
+```
+# Rename this file to .conf (remove .disabled) to use Intel as fallback
+Section "Device"
+    Identifier "Intel Graphics"
+    Driver "modesetting"
+    Option "AccelMethod" "glamor"
+EndSection
+```
+
+**Note:** This file is disabled by default. Only enable it (rename to remove `.disabled`) if NVIDIA completely fails.
+
+### 8. Monitor system stability
+
+Create a monitoring script:
+
+```bash
+nano ~/check-gpu-health.sh
+```
+
+```bash
+#!/bin/bash
+
+echo "=== GPU Health Check ==="
+echo "Date: $(date)"
+echo ""
+
+echo "1. NVIDIA Driver Status:"
+nvidia-smi --query-gpu=name,driver_version,temperature.gpu,power.draw,memory.used,memory.total --format=csv,noheader 2>&1
+echo ""
+
+echo "2. Active Display Server:"
+echo $XDG_SESSION_TYPE
+echo ""
+
+echo "3. Loaded GPU Modules:"
+lsmod | grep -E "nvidia|i915" | awk '{print $1}'
+echo ""
+
+echo "4. GPU Errors (last 50 lines):"
+journalctl -b | grep -i "nvidia\|gpu" | grep -iE "error|fail|fatal" | tail -20
+echo ""
+
+echo "5. System Load:"
+uptime
+echo ""
+
+echo "6. Memory Usage:"
+free -h
+```
+
+Make it executable:
+
+```bash
+chmod +x ~/check-gpu-health.sh
+```
+
+Run it periodically:
+
+```bash
+./check-gpu-health.sh
+```
+
+### 9. Critical: Identify what causes the freeze
+
+Before rebooting, let's check what triggers the freeze:
+
+```bash
+# Check previous boot logs for crashes
+journalctl -b -1 -p err
+
+# Check for thermal issues
+sensors | grep -i temp
+
+# Check if it's related to power management
+sudo nano /etc/systemd/logind.conf
+# Ensure: HandleLidSwitch=ignore (if laptop)
+```
+
+### 10. Complete system verification checklist
+
+Run these after implementing changes:
+
+```bash
+# 1. Verify NVIDIA is active
+nvidia-smi
+
+# 2. Check no nouveau is loaded
+lsmod | grep nouveau  # Should return nothing
+
+# 3. Verify kernel parameters
+cat /proc/cmdline | grep nvidia
+
+# 4. Check Xorg is using NVIDIA
+cat /var/log/Xorg.0.log | grep -i nvidia
+
+# 5. Test NVIDIA rendering
+glxinfo | grep -i "opengl renderer"  # Should show NVIDIA
+
+# 6. Check persistence daemon
+systemctl status nvidia-persistenced
+```
+
+## What to do if system freezes again:
+
+1. **Don't panic** - Boot into recovery mode (hold Shift during boot)
+2. **Switch to Intel temporarily:**
+   ```bash
+   sudo mv /etc/X11/xorg.conf.d/10-nvidia-primary.conf /tmp/
+   sudo mv /etc/X11/xorg.conf.d/20-intel-fallback.conf.disabled /etc/X11/xorg.conf.d/20-intel-fallback.conf
+   sudo systemctl restart display-manager
+   ```
+3. **Investigate logs:**
+   ```bash
+   journalctl -b -1 -p err > ~/last-boot-errors.txt
+   ```
+
+## Final Recommendation
+
+After making these changes, **reboot** and monitor for 24-48 hours. Your current setup looks stable, but these changes will:
+
+1. Make NVIDIA initialization more robust
+2. Add proper fallback mechanisms
+3. Prevent module conflicts
+4. Enable better monitoring
+
+Run the health check script periodically to catch issues early. If you notice specific patterns (time of day, certain applications, etc.) when freezes occur, share those details for more targeted troubleshooting.
+
+Perfect! I can see your system is running **Kali Linux** with NVIDIA already configured. The configuration looks good, but let's optimize it for maximum stability. Here's what we need to do:
+
+## Current Status
+- ✅ NVIDIA driver 580.95.05 installed
+- ✅ Basic Xorg configuration exists (`20-nvidia.conf`)
+- ✅ NVIDIA set as primary GPU
+- ⚠️ Missing kernel parameters for stability
+- ⚠️ No persistence daemon configured
+
+## Step-by-Step Stabilization
+
+### 1. Add NVIDIA kernel parameters for stability
+
+```bash
+sudo nano /etc/default/grub
+```
+
+Find the line starting with `GRUB_CMDLINE_LINUX_DEFAULT` and change it to:
+
+```bash
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash nvidia-drm.modeset=1 nouveau.modeset=0"
+```
+
+Save (Ctrl+O, Enter) and exit (Ctrl+X), then update GRUB:
+
+```bash
+sudo update-grub
+```
+
+### 2. Blacklist nouveau (prevent conflicts)
+
+```bash
+sudo nano /etc/modprobe.d/blacklist-nouveau.conf
+```
+
+Add these lines:
+
+```
+blacklist nouveau
+options nouveau modeset=0
+```
+
+Save and exit, then update initramfs:
+
+```bash
+sudo update-initramfs -u -k all
+```
+
+### 3. Enable NVIDIA persistence daemon
+
+This prevents the driver from unloading and improves stability:
+
+```bash
+sudo systemctl enable nvidia-persistenced
+sudo systemctl start nvidia-persistenced
+```
+
+Verify it's running:
+
+```bash
+sudo systemctl status nvidia-persistenced
+```
+
+### 4. Improve your Xorg configuration
+
+Your current config is minimal. Let's enhance it:
+
+```bash
+sudo nano /etc/X11/xorg.conf.d/20-nvidia.conf
+```
+
+Replace the content with:
+
+```
+Section "OutputClass"
+    Identifier "nvidia"
+    MatchDriver "nvidia-drm"
+    Driver "nvidia"
+    Option "AllowEmptyInitialConfiguration"
+    Option "PrimaryGPU" "yes"
+    Option "TripleBuffer" "true"
+    Option "Coolbits" "4"
+    ModulePath "/usr/lib/x86_64-linux-gnu/nvidia/xorg"
+EndSection
+
+Section "ServerLayout"
+    Identifier "layout"
+    Option "AllowNVIDIAGPUScreens"
+EndSection
+```
+
+### 5. Fix AppArmor denials (reduce log noise)
+
+Create the AppArmor local configuration:
+
+```bash
+sudo mkdir -p /etc/apparmor.d/local
+sudo nano /etc/apparmor.d/local/usr.lib.xorg
+```
+
+Add:
+
+```
+# Allow NVIDIA driver access
+/proc/driver/nvidia/params r,
+/dev/nvidia* rw,
+/dev/nvidiactl rw,
+/dev/nvidia-modeset rw,
+```
+
+Save and reload AppArmor:
+
+```bash
+sudo systemctl reload apparmor
+```
+
+### 6. Check loaded modules
+
+```bash
+lsmod | grep -E "nvidia|nouveau|i915"
+```
+
+**Expected output:** Should show nvidia modules, NO nouveau
+
+### 7. Create Intel fallback configuration (emergency only)
+
+```bash
+sudo nano /etc/X11/xorg.conf.d/99-intel-fallback.conf.disabled
+```
+
+Add:
+
+```
+# Emergency Intel fallback configuration
+# To activate: sudo mv /etc/X11/xorg.conf.d/99-intel-fallback.conf.disabled /etc/X11/xorg.conf.d/99-intel-fallback.conf
+# To disable NVIDIA: sudo mv /etc/X11/xorg.conf.d/20-nvidia.conf /etc/X11/xorg.conf.d/20-nvidia.conf.disabled
+# Then: sudo systemctl restart display-manager
+
+Section "Device"
+    Identifier "Intel Graphics"
+    Driver "modesetting"
+    BusID "PCI:0:2:0"
+    Option "AccelMethod" "glamor"
+    Option "DRI" "3"
+EndSection
+
+Section "Screen"
+    Identifier "Intel Screen"
+    Device "Intel Graphics"
+EndSection
+```
+
+### 8. Create a GPU health monitoring script
+
+```bash
+nano ~/gpu-health-check.sh
+```
+
+Paste this:
+
+```bash
+#!/bin/bash
+
+echo "═══════════════════════════════════════════"
+echo "     GPU HEALTH CHECK - $(date)"
+echo "═══════════════════════════════════════════"
+echo ""
+
+echo "1. NVIDIA Driver Status:"
+if nvidia-smi &>/dev/null; then
+    nvidia-smi --query-gpu=name,driver_version,temperature.gpu,power.draw,memory.used,memory.total,gpu_bus_id --format=csv,noheader
+    echo "   ✓ NVIDIA driver is responding"
+else
+    echo "   ✗ NVIDIA driver NOT responding!"
+fi
+echo ""
+
+echo "2. Loaded GPU Modules:"
+lsmod | grep -E "^nvidia|^nouveau|^i915" | awk '{printf "   %s\n", $1}'
+if lsmod | grep -q nouveau; then
+    echo "   ⚠ WARNING: nouveau is loaded (conflict!)"
+fi
+echo ""
+
+echo "3. Display Server:"
+echo "   Session Type: $XDG_SESSION_TYPE"
+echo "   Display: $DISPLAY"
+echo ""
+
+echo "4. OpenGL Renderer:"
+glxinfo | grep -i "opengl renderer" | sed 's/^/   /'
+echo ""
+
+echo "5. GPU Temperature & Power:"
+nvidia-smi --query-gpu=temperature.gpu,power.draw,fan.speed --format=csv,noheader 2>/dev/null | \
+    awk -F',' '{printf "   Temp: %s°C | Power: %s | Fan: %s\n", $1, $2, $3}'
+echo ""
+
+echo "6. Recent GPU Errors (last 10):"
+journalctl -b --no-pager | grep -iE "nvidia.*error|nvidia.*fail|gpu.*error" | tail -10 | sed 's/^/   /'
+if ! journalctl -b --no-pager | grep -iq "nvidia.*error\|nvidia.*fail"; then
+    echo "   ✓ No GPU errors found"
+fi
+echo ""
+
+echo "7. System Uptime & Load:"
+uptime | sed 's/^/   /'
+echo ""
+
+echo "8. Persistence Daemon:"
+if systemctl is-active --quiet nvidia-persistenced; then
+    echo "   ✓ nvidia-persistenced is running"
+else
+    echo "   ✗ nvidia-persistenced is NOT running!"
+fi
+echo ""
+
+echo "═══════════════════════════════════════════"
+```
+
+Make it executable:
+
+```bash
+chmod +x ~/gpu-health-check.sh
+```
+
+### 9. Create emergency Intel switch script
+
+```bash
+sudo nano /usr/local/bin/switch-to-intel-emergency.sh
+```
+
+Add:
+
+```bash
+#!/bin/bash
+
+echo "⚠️  EMERGENCY: Switching to Intel GPU"
+echo "This will disable NVIDIA and use Intel integrated graphics"
+echo ""
+
+# Backup NVIDIA config
+sudo mv /etc/X11/xorg.conf.d/20-nvidia.conf /etc/X11/xorg.conf.d/20-nvidia.conf.disabled 2>/dev/null
+
+# Enable Intel fallback
+sudo mv /etc/X11/xorg.conf.d/99-intel-fallback.conf.disabled /etc/X11/xorg.conf.d/99-intel-fallback.conf 2>/dev/null
+
+# Unload NVIDIA modules
+sudo rmmod nvidia_drm 2>/dev/null
+sudo rmmod nvidia_modeset 2>/dev/null
+sudo rmmod nvidia_uvm 2>/dev/null
+sudo rmmod nvidia 2>/dev/null
+
+echo "✓ Switched to Intel. Restarting display manager..."
+sudo systemctl restart display-manager
+```
+
+Make it executable:
+
+```bash
+sudo chmod +x /usr/local/bin/switch-to-intel-emergency.sh
+```
+
+### 10. Final verification checklist
+
+Run these commands to verify everything:
+
+```bash
+# Check kernel parameters (should show nvidia-drm.modeset=1)
+cat /proc/cmdline
+
+# Check loaded modules (should NOT show nouveau)
+lsmod | grep -E "nvidia|nouveau|i915"
+
+# Test NVIDIA
+nvidia-smi
+
+# Check persistence daemon
+systemctl status nvidia-persistenced
+
+# Run health check
+~/gpu-health-check.sh
+```
+
+### 11. **REBOOT NOW**
+
+After all changes:
+
+```bash
+sudo reboot
+```
+
+## After Reboot - Verify Everything Works
+
+```bash
+# Run the health check
+~/gpu-health-check.sh
+
+# Check that nouveau is NOT loaded
+lsmod | grep nouveau  # Should return nothing
+
+# Verify kernel parameters are active
+cat /proc/cmdline | grep nvidia-drm
+```
+
+## If System Freezes Again
+
+**Recovery steps:**
+
+1. **Boot to recovery mode:**
+   - Hold Shift during boot
+   - Select "Advanced options"
+   - Choose recovery mode
+
+2. **Switch to Intel GPU:**
+   ```bash
+   sudo /usr/local/bin/switch-to-intel-emergency.sh
+   ```
+
+3. **Or manually:**
+   ```bash
+   sudo mv /etc/X11/xorg.conf.d/20-nvidia.conf /tmp/
+   sudo systemctl restart display-manager
+   ```
+
+4. **Check logs:**
+   ```bash
+   journalctl -b -1 -p err > ~/last-crash.log
+   cat ~/last-crash.log
+   ```
+
+## Monitoring for Stability
+
+Run the health check script daily:
+
+```bash
+~/gpu-health-check.sh
+```
+
+Watch for patterns:
+- Does it freeze at specific times?
+- After running certain applications?
+- Related to temperature/power usage?
+
+Share the output if issues persist!
+
+Perfect! Your GRUB configuration already has the NVIDIA kernel parameters. Now let's complete the remaining stabilization steps.
+
+## Continue with Remaining Steps
+
+### 1. Update GRUB (since config is already modified)
+
+```bash
+sudo update-grub
+```
+
+### 2. Blacklist nouveau
+
+```bash
+sudo nano /etc/modprobe.d/blacklist-nouveau.conf
+```
+
+Add these lines:
+
+```
+blacklist nouveau
+options nouveau modeset=0
+```
+
+Save and exit, then update initramfs:
+
+```bash
+sudo update-initramfs -u -k all
+```
+
+### 3. Verify nouveau is not currently loaded
+
+```bash
+lsmod | grep nouveau
+```
+
+**Expected:** Should return nothing. If it shows nouveau, we need to reboot after step 2.
+
+### 4. Enable NVIDIA persistence daemon
+
+```bash
+sudo systemctl enable nvidia-persistenced
+sudo systemctl start nvidia-persistenced
+sudo systemctl status nvidia-persistenced
+```
+
+### 5. Update Xorg configuration for better stability
+
+```bash
+sudo nano /etc/X11/xorg.conf.d/20-nvidia.conf
+```
+
+Replace content with:
+
+```
+Section "OutputClass"
+    Identifier "nvidia"
+    MatchDriver "nvidia-drm"
+    Driver "nvidia"
+    Option "AllowEmptyInitialConfiguration"
+    Option "PrimaryGPU" "yes"
+    Option "TripleBuffer" "true"
+    ModulePath "/usr/lib/x86_64-linux-gnu/nvidia/xorg"
+EndSection
+
+Section "ServerLayout"
+    Identifier "layout"
+    Option "AllowNVIDIAGPUScreens"
+EndSection
+```
+
+### 6. Fix AppArmor denials
+
+```bash
+sudo mkdir -p /etc/apparmor.d/local
+sudo nano /etc/apparmor.d/local/usr.lib.xorg
+```
+
+Add:
+
+```
+# Allow NVIDIA driver access
+/proc/driver/nvidia/params r,
+/dev/nvidia* rw,
+/dev/nvidiactl rw,
+/dev/nvidia-modeset rw,
+```
+
+Save and reload AppArmor:
+
+```bash
+sudo systemctl reload apparmor
+```
+
+### 7. Create Intel fallback configuration (disabled by default)
+
+```bash
+sudo nano /etc/X11/xorg.conf.d/99-intel-fallback.conf.disabled
+```
+
+Add:
+
+```
+# Emergency Intel fallback configuration
+# To activate: 
+#   sudo mv /etc/X11/xorg.conf.d/20-nvidia.conf /etc/X11/xorg.conf.d/20-nvidia.conf.disabled
+#   sudo mv /etc/X11/xorg.conf.d/99-intel-fallback.conf.disabled /etc/X11/xorg.conf.d/99-intel-fallback.conf
+#   sudo systemctl restart display-manager
+
+Section "Device"
+    Identifier "Intel Graphics"
+    Driver "modesetting"
+    BusID "PCI:0:2:0"
+    Option "AccelMethod" "glamor"
+    Option "DRI" "3"
+EndSection
+```
+
+### 8. Create GPU health monitoring script
+
+```bash
+nano ~/gpu-health-check.sh
+```
+
+Paste this content:
+
+```bash
+#!/bin/bash
+
+echo "═══════════════════════════════════════════"
+echo "     GPU HEALTH CHECK - $(date)"
+echo "═══════════════════════════════════════════"
+echo ""
+
+echo "1. NVIDIA Driver Status:"
+if nvidia-smi &>/dev/null; then
+    nvidia-smi --query-gpu=name,driver_version,temperature.gpu,power.draw,memory.used,memory.total --format=csv,noheader
+    echo "   ✓ NVIDIA driver is responding"
+else
+    echo "   ✗ NVIDIA driver NOT responding!"
+fi
+echo ""
+
+echo "2. Loaded GPU Modules:"
+lsmod | grep -E "^nvidia|^nouveau|^i915" | awk '{printf "   %s\n", $1}'
+if lsmod | grep -q nouveau; then
+    echo "   ⚠ WARNING: nouveau is loaded (CONFLICT!)"
+fi
+echo ""
+
+echo "3. Display Server:"
+echo "   Session Type: $XDG_SESSION_TYPE"
+echo "   Display: $DISPLAY"
+echo ""
+
+echo "4. OpenGL Renderer:"
+glxinfo 2>/dev/null | grep -i "opengl renderer" | sed 's/^/   /' || echo "   (glxinfo not available)"
+echo ""
+
+echo "5. GPU Temperature & Power:"
+nvidia-smi --query-gpu=temperature.gpu,power.draw,fan.speed --format=csv,noheader 2>/dev/null | \
+    awk -F',' '{printf "   Temp: %s°C | Power: %s | Fan: %s\n", $1, $2, $3}'
+echo ""
+
+echo "6. Recent GPU Errors (last 10):"
+journalctl -b --no-pager 2>/dev/null | grep -iE "nvidia.*error|nvidia.*fail|gpu.*error" | tail -10 | sed 's/^/   /'
+if ! journalctl -b --no-pager 2>/dev/null | grep -iq "nvidia.*error\|nvidia.*fail"; then
+    echo "   ✓ No GPU errors found in current boot"
+fi
+echo ""
+
+echo "7. System Uptime & Load:"
+uptime | sed 's/^/   /'
+echo ""
+
+echo "8. NVIDIA Persistence Daemon:"
+if systemctl is-active --quiet nvidia-persistenced; then
+    echo "   ✓ nvidia-persistenced is running"
+else
+    echo "   ✗ nvidia-persistenced is NOT running!"
+fi
+echo ""
+
+echo "9. Kernel Parameters:"
+cat /proc/cmdline | grep -o "nvidia[^ ]*" | sed 's/^/   /'
+echo ""
+
+echo "═══════════════════════════════════════════"
+```
+
+Make it executable:
+
+```bash
+chmod +x ~/gpu-health-check.sh
+```
+
+### 9. Create emergency Intel switch script
+
+```bash
+sudo nano /usr/local/bin/switch-to-intel-emergency.sh
+```
+
+Add:
+
+```bash
+#!/bin/bash
+
+echo "⚠️  EMERGENCY: Switching to Intel GPU"
+echo "================================================"
+echo "This will disable NVIDIA and use Intel graphics"
+echo "================================================"
+echo ""
+
+# Backup NVIDIA config
+if [ -f /etc/X11/xorg.conf.d/20-nvidia.conf ]; then
+    sudo mv /etc/X11/xorg.conf.d/20-nvidia.conf /etc/X11/xorg.conf.d/20-nvidia.conf.disabled
+    echo "✓ Disabled NVIDIA configuration"
+fi
+
+# Enable Intel fallback
+if [ -f /etc/X11/xorg.conf.d/99-intel-fallback.conf.disabled ]; then
+    sudo mv /etc/X11/xorg.conf.d/99-intel-fallback.conf.disabled /etc/X11/xorg.conf.d/99-intel-fallback.conf
+    echo "✓ Enabled Intel configuration"
+fi
+
+# Unload NVIDIA modules
+echo "Unloading NVIDIA modules..."
+sudo rmmod nvidia_drm 2>/dev/null
+sudo rmmod nvidia_modeset 2>/dev/null
+sudo rmmod nvidia_uvm 2>/dev/null
+sudo rmmod nvidia 2>/dev/null
+
+echo ""
+echo "✓ Switched to Intel GPU"
+echo "Restarting display manager in 3 seconds..."
+sleep 3
+sudo systemctl restart display-manager
+```
+
+Make it executable:
+
+```bash
+sudo chmod +x /usr/local/bin/switch-to-intel-emergency.sh
+```
+
+### 10. Create switch back to NVIDIA script
+
+```bash
+sudo nano /usr/local/bin/switch-to-nvidia.sh
+```
+
+Add:
+
+```bash
+#!/bin/bash
+
+echo "🔄 Switching back to NVIDIA GPU"
+echo "================================"
+echo ""
+
+# Disable Intel config
+if [ -f /etc/X11/xorg.conf.d/99-intel-fallback.conf ]; then
+    sudo mv /etc/X11/xorg.conf.d/99-intel-fallback.conf /etc/X11/xorg.conf.d/99-intel-fallback.conf.disabled
+    echo "✓ Disabled Intel configuration"
+fi
+
+# Enable NVIDIA config
+if [ -f /etc/X11/xorg.conf.d/20-nvidia.conf.disabled ]; then
+    sudo mv /etc/X11/xorg.conf.d/20-nvidia.conf.disabled /etc/X11/xorg.conf.d/20-nvidia.conf
+    echo "✓ Enabled NVIDIA configuration"
+fi
+
+echo ""
+echo "✓ Switched to NVIDIA GPU"
+echo "Restarting display manager in 3 seconds..."
+sleep 3
+sudo systemctl restart display-manager
+```
+
+Make it executable:
+
+```bash
+sudo chmod +x /usr/local/bin/switch-to-nvidia.sh
+```
+
+### 11. Run quick verification before reboot
+
+```bash
+# Check current modules
+lsmod | grep -E "nvidia|nouveau"
+
+# Check persistence daemon
+systemctl status nvidia-persistenced
+
+# Run health check
+~/gpu-health-check.sh
+```
+
+### 12. **REBOOT to apply all changes**
+
+```bash
+sudo reboot
+```
+
+---
+
+## After Reboot - Verification
+
+Once system reboots, run:
+
+```bash
+~/gpu-health-check.sh
+```
+
+This should show:
+- ✓ NVIDIA driver responding
+- ✓ No nouveau module loaded
+- ✓ nvidia-persistenced running
+- ✓ Kernel parameters active (nvidia-drm.modeset=1)
+- ✓ No GPU errors
+
+Share the output if you see any issues!
+
+## Quick Reference Commands
+
+**Monitor GPU health:**
+```bash
+~/gpu-health-check.sh
+```
+
+**Emergency switch to Intel (if system freezes):**
+```bash
+sudo /usr/local/bin/switch-to-intel-emergency.sh
+```
+
+**Switch back to NVIDIA:**
+```bash
+sudo /usr/local/bin/switch-to-nvidia.sh
+```
+
+**Check GPU temperature in real-time:**
+```bash
+watch -n 1 nvidia-smi
+```
+
+**View recent errors:**
+```bash
+journalctl -b -p err | grep -i nvidia
+```
+
+I'll help you diagnose and stabilize your system with proper NVIDIA GPU configuration. Let me check the shared conversation first to understand the context.I couldn't access the shared conversation, but I can help you stabilize your NVIDIA/Intel hybrid GPU setup. Based on your description, it sounds like you have an Optimus laptop that's experiencing boot hangs.
+
+## **Immediate Diagnostics**
+
+Run these commands to check your current configuration:
+
+```bash
+# Check which GPU driver is loaded
+lspci | grep -E "VGA|3D"
+lsmod | grep -E "nvidia|nouveau|i915"
+
+# Check current display server and GPU in use
+echo $XDG_SESSION_TYPE
+glxinfo | grep -E "OpenGL renderer|vendor"
+
+# Check NVIDIA driver status
+nvidia-smi
+
+# Check boot logs for errors
+journalctl -b | grep -E "nvidia|nouveau|gpu|drm"
+dmesg | grep -E "nvidia|nouveau|gpu|drm"
+```
+
+## **Stabilization Steps**
+
+### **1. Ensure NVIDIA Driver is Primary (Recommended Setup)**
+
+Create or edit `/etc/modprobe.d/nvidia.conf`:
+```bash
+sudo nano /etc/modprobe.d/nvidia.conf
+```
+
+Add these lines:
+```
+# Load NVIDIA modules early
+options nvidia-drm modeset=1
+options nvidia NVreg_PreserveVideoMemoryAllocations=1
+```
+
+### **2. Block Nouveau Driver (Prevents Conflicts)**
+
+Create `/etc/modprobe.d/blacklist-nouveau.conf`:
+```bash
+sudo nano /etc/modprobe.d/blacklist-nouveau.conf
+```
+
+Add:
+```
+blacklist nouveau
+options nouveau modeset=0
+```
+
+### **3. Set NVIDIA as Primary with Intel Fallback**
+
+Create `/etc/X11/xorg.conf.d/10-nvidia-primary.conf`:
+```bash
+sudo mkdir -p /etc/X11/xorg.conf.d/
+sudo nano /etc/X11/xorg.conf.d/10-nvidia-primary.conf
+```
+
+Add:
+```
+Section "Module"
+    Load "modesetting"
+EndSection
+
+Section "Device"
+    Identifier "nvidia"
+    Driver "nvidia"
+    BusID "PCI:1:0:0"  # Adjust based on lspci output
+    Option "AllowEmptyInitialConfiguration"
+    Option "PrimaryGPU" "yes"
+EndSection
+```
+
+### **4. Configure GDM for NVIDIA (If using GDM)**
+
+```bash
+# Create GDM udev rules
+sudo nano /lib/udev/rules.d/61-gdm.rules
+```
+
+Comment out or remove Intel GPU lines to prevent GDM from using Intel:
+```
+# Comment these out:
+# ATTR{path}=="*-Intel_Corporation*", TAG+="master-of-seat"
+```
+
+### **5. Update Initramfs and Grub**
+
+```bash
+# Rebuild initramfs with new settings
+sudo update-initramfs -u
+
+# Update GRUB (optional, for boot parameters)
+sudo nano /etc/default/grub
+```
+
+Add these kernel parameters to `GRUB_CMDLINE_LINUX_DEFAULT`:
+```
+nvidia-drm.modeset=1 nouveau.modeset=0
+```
+
+Then update:
+```bash
+sudo update-grub
+```
+
+### **6. Intel Fallback Configuration (Emergency Only)**
+
+Create `/usr/local/bin/gpu-fallback.sh`:
+```bash
+sudo nano /usr/local/bin/gpu-fallback.sh
+```
+
+```bash
+#!/bin/bash
+# Emergency Intel fallback script
+
+if ! nvidia-smi &>/dev/null; then
+    echo "NVIDIA failed, attempting Intel fallback..."
+    
+    # Unload NVIDIA modules
+    sudo rmmod nvidia_drm nvidia_modeset nvidia_uvm nvidia 2>/dev/null
+    
+    # Load Intel
+    sudo modprobe i915
+    
+    # Restart display manager
+    sudo systemctl restart gdm  # or lightdm/sddm
+fi
+```
+
+Make it executable:
+```bash
+sudo chmod +x /usr/local/bin/gpu-fallback.sh
+```
+
+## **Verification Steps**
+
+After reboot, verify everything:
+
+```bash
+# 1. Check if NVIDIA is loaded
+nvidia-smi
+
+# 2. Verify display is using NVIDIA
+glxinfo | grep "OpenGL renderer"
+
+# 3. Check for errors
+journalctl -b -p err
+
+# 4. Test GPU switching (if needed)
+prime-select nvidia  # On Ubuntu-based systems
+# or
+optimus-manager --switch nvidia  # If using optimus-manager
+```
+
+## **If System Still Hangs**
+
+If boot hangs persist:
+
+1. **Boot into recovery mode** (hold Shift during boot)
+2. **Add temporary boot parameter**: `nomodeset` or `nvidia-drm.modeset=0`
+3. **Check logs**: `journalctl -b -1` (previous boot)
+4. **Disable automatic GPU detection**: Remove `/etc/X11/xorg.conf.d/` files temporarily
+
+## **Distribution-Specific Notes**
+
+Which distribution are you using? (Ubuntu, Fedora, Arch, etc.)? Different distros have different tools:
+- **Ubuntu/Debian**: `prime-select`
+- **Fedora**: Built-in GNOME settings
+- **Arch**: `optimus-manager` or `nvidia-prime`
+
+Let me know your distro and I can provide more specific configuration steps!
+
+I'll help you stabilize your system. Let me gather the key information to diagnose the issues:
+
+## Critical Information Needed
+
+**1. Graphics/Display Issues:**
+```bash
+# Current graphics driver status
+lspci | grep -E "VGA|3D"
+prime-select query  # if available
+nvidia-smi  # check if NVIDIA is working
+lsmod | grep -E "nvidia|nouveau|i915"
+```
+
+**2. Boot/Suspend Logs:**
+```bash
+# Recent boot issues
+journalctl -b -p err
+journalctl -b -1 -p err  # previous boot
+
+# Suspend/wake issues
+journalctl -u systemd-suspend.service --since "1 hour ago"
+journalctl | grep -i "suspend\|wake"
+```
+
+**3. System Info:**
+```bash
+# Basic system details
+uname -r  # kernel version
+cat /etc/os-release  # distro
+nvidia-smi  # NVIDIA driver version if working
+```
+
+**4. Display Manager & Session:**
+```bash
+systemctl status gdm  # or lightdm/sddm
+echo $XDG_SESSION_TYPE  # X11 or Wayland?
+```
+
+**5. Power Management:**
+```bash
+cat /sys/power/mem_sleep  # available sleep states
+systemctl status systemd-suspend.service
+```
+
+## Quick Initial Checks While System is Working
+
+Run these now before it freezes:
+```bash
+# Check for errors in current session
+dmesg | grep -i "error\|fail\|nvidia"
+journalctl -b | grep -i "nvidia\|suspend"
+```
+
+## Immediate Stabilization Steps (Try First)
+
+**1. Force NVIDIA persistence (prevents GPU initialization failures):**
+```bash
+sudo nvidia-persistenced --persistence-mode
+sudo systemctl enable nvidia-persistenced
+```
+
+**2. Disable Wayland if using it (often causes NVIDIA issues):**
+```bash
+sudo nano /etc/gdm3/custom.conf
+# Uncomment: WaylandEnable=false
+sudo systemctl restart gdm
+```
+
+**3. Disable automatic suspend temporarily:**
+```bash
+sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
+```
+
+Please provide the output of these commands, and also tell me:
+- Which Linux distro/version?
+- When does the freeze happen (idle, during specific tasks)?
+- Is this a laptop or desktop?
+- Does the freeze happen more after wake attempts?
+
+This will help me create a targeted fix for your specific setup.
+
+Excellent! Your logs show the system is mostly working well. Here's what I found:
+
+## Good News ✅
+- **NVIDIA is working perfectly** - Driver 580.95.05 loaded, Persistence-M is ON, GPU is active
+- **X11 session** (not Wayland - good for NVIDIA)
+- **Both GPUs detected** (Intel + NVIDIA)
+- System successfully resumed from last suspend attempt
+
+## Issues Found 🔍
+
+### 1. **Suspend Wake Issue** (Main Problem)
+Your system uses **s2idle (Modern Standby)** which is known to cause instant wake-ups on some Dell laptops. Earlier attempts show:
+```
+Failed to put system to sleep. System resumed again: Input/output error
+```
+
+### 2. **Minor Issues**
+- nvidia-persistenced already running (tried to start twice)
+- Missing gnome-keyring daemon control file (cosmetic)
+- Hostname socket issue (cosmetic)
+
+---
+
+## Solutions
+
+### Fix 1: Change Suspend Mode (Fix Wake Issue)
+
+Your system supports both `s2idle` and `deep` sleep. Let's switch to deep:
+
+```bash
+# Check current mode
+cat /sys/power/mem_sleep
+# Shows: [s2idle] deep  <- s2idle is active
+
+# Switch to deep sleep permanently
+sudo nano /etc/systemd/sleep.conf
+```
+
+Add these lines:
+```ini
+[Sleep]
+SuspendMode=deep
+SuspendState=mem
+```
+
+**Or use this one-liner:**
+```bash
+echo -e "[Sleep]\nSuspendMode=deep\nSuspendState=mem" | sudo tee /etc/systemd/sleep.conf
+```
+
+### Fix 2: Disable Problematic Wake Sources
+
+Check what's waking your system:
+```bash
+cat /proc/acpi/wakeup
+```
+
+Common culprits on Dell laptops:
+```bash
+# Disable USB wake (if causing issues)
+echo XHC | sudo tee /proc/acpi/wakeup
+
+# Make it permanent
+sudo nano /etc/systemd/system/disable-usb-wake.service
+```
+
+Add:
+```ini
+[Unit]
+Description=Disable USB Wake
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c "echo XHC > /proc/acpi/wakeup"
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable it:
+```bash
+sudo systemctl enable disable-usb-wake.service
+sudo systemctl start disable-usb-wake.service
+```
+
+### Fix 3: Ensure NVIDIA GPU Fallback Configuration
+
+Create a proper GPU fallback system:
+
+```bash
+sudo nano /etc/X11/xorg.conf.d/20-nvidia-fallback.conf
+```
+
+Add:
+```conf
+Section "ServerLayout"
+    Identifier "layout"
+    Screen 0 "nvidia"
+    Inactive "intel"
+EndSection
+
+Section "Device"
+    Identifier "nvidia"
+    Driver "nvidia"
+    BusID "PCI:1:0:0"
+    Option "PrimaryGPU" "yes"
+EndSection
+
+Section "Screen"
+    Identifier "nvidia"
+    Device "nvidia"
+EndSection
+
+Section "Device"
+    Identifier "intel"
+    Driver "modesetting"
+    BusID "PCI:0:2:0"
+EndSection
+
+Section "Screen"
+    Identifier "intel"
+    Device "intel"
+EndSection
+```
+
+### Fix 4: Power Management Tweaks
+
+```bash
+sudo nano /etc/modprobe.d/nvidia-pm.conf
+```
+
+Add:
+```conf
+# Better NVIDIA power management
+options nvidia NVreg_PreserveVideoMemoryAllocations=1
+options nvidia NVreg_TemporaryFilePath=/var/tmp
+```
+
+Update initramfs:
+```bash
+sudo update-initramfs -u
+```
+
+---
+
+## Verification Steps
+
+After applying fixes, **reboot** and test:
+
+```bash
+# 1. Check sleep mode changed
+cat /sys/power/mem_sleep
+# Should show: s2idle [deep]
+
+# 2. Test suspend
+systemctl suspend
+
+# 3. Wake and check logs
+journalctl -b | grep -i suspend | tail -20
+
+# 4. Check wake sources
+cat /proc/acpi/wakeup | grep enabled
+```
+
+---
+
+## If System Still Freezes
+
+If you experience random freezes (not just during suspend), run:
+
+```bash
+# Monitor for GPU hangs
+sudo dmesg -w
+
+# Check for PCIe errors
+journalctl -b | grep -i "pcie\|AER"
+
+# NVIDIA module parameters for stability
+sudo nano /etc/modprobe.d/nvidia-stability.conf
+```
+
+Add:
+```conf
+options nvidia NVreg_UsePageAttributeTable=1
+options nvidia NVreg_InitializeSystemMemoryAllocations=0
+options nvidia_drm modeset=1
+```
+
+Then rebuild:
+```bash
+sudo update-initramfs -u
+sudo reboot
+```
+
+---
+
+## Quick Summary
+
+**Do these in order:**
+1. ✅ Change sleep mode to "deep" 
+2. ✅ Disable problematic wake sources (check XHC first)
+3. ✅ Add NVIDIA power management options
+4. ✅ Reboot and test
+
+Your NVIDIA setup is actually quite good already! The main issue is the s2idle suspend mode causing instant wake-ups, which is a common Dell laptop problem.
+
+**Would you like me to create a script to automate all these fixes?**
+
+Good! Your config looks fine for dual displays (Dell monitor + laptop screen). The issue is GNOME getting stuck at boot. Let me fix this systematically.
+
+## Current Setup Analysis
+- You have proper NVIDIA config with `AllowEmptyInitialConfiguration` (allows Intel to handle laptop display initially)
+- NVIDIA is set as PrimaryGPU
+- The setup should support both displays
+
+## Why GNOME Gets Stuck at Boot
+
+This is a classic **NVIDIA + hybrid graphics timing issue**. The display manager starts before NVIDIA is fully initialized.
+
+---
+
+## Solution: Complete Fix for Boot Hang + Dual Display
+
+### Step 1: Fix GDM Wayland (Already Done ✅)
+I see you have `/usr/lib/systemd/system/gdm.service.d/disable-wayland.conf` - good!
+
+Verify it's correct:
+```bash
+cat /usr/lib/systemd/system/gdm.service.d/disable-wayland.conf
+```
+
+Should contain:
+```ini
+[Service]
+ExecStart=
+ExecStart=/usr/sbin/gdm3 --force-xorg
+```
+
+### Step 2: Ensure NVIDIA Modules Load Early
+
+```bash
+sudo nano /etc/initramfs-tools/modules
+```
+
+Add these at the bottom:
+```
+nvidia
+nvidia_modeset
+nvidia_uvm
+nvidia_drm
+```
+
+Then rebuild:
+```bash
+sudo update-initramfs -u
+```
+
+### Step 3: Fix the Xorg Configuration for Dual Displays
+
+Your current `20-nvidia.conf` is good, but let's add Intel support for the laptop display:
+
+```bash
+sudo nano /etc/X11/xorg.conf.d/20-nvidia.conf
+```
+
+Replace with this **complete config for dual displays**:
+```conf
+Section "OutputClass"
+    Identifier "nvidia"
+    MatchDriver "nvidia-drm"
+    Driver "nvidia"
+    Option "AllowEmptyInitialConfiguration"
+    Option "PrimaryGPU" "yes"
+    Option "TripleBuffer" "true"
+    Option "Coolbits" "4"
+    ModulePath "/usr/lib/x86_64-linux-gnu/nvidia/xorg"
+EndSection
+
+Section "OutputClass"
+    Identifier "intel"
+    MatchDriver "i915"
+    Driver "modesetting"
+EndSection
+
+Section "ServerLayout"
+    Identifier "layout"
+    Option "AllowNVIDIAGPUScreens"
+EndSection
+```
+
+### Step 4: Create Display Setup Script
+
+GNOME needs help setting up displays after NVIDIA loads:
+
+```bash
+sudo nano /usr/local/bin/setup-displays.sh
+```
+
+Add:
+```bash
+#!/bin/bash
+# Wait for NVIDIA to be ready
+sleep 2
+
+# Set up displays - NVIDIA for external, Intel for laptop
+xrandr --setprovideroutputsource modesetting NVIDIA-0
+xrandr --auto
+
+# Optional: Set specific layout if needed
+# xrandr --output HDMI-0 --primary --auto --output eDP-1 --auto --right-of HDMI-0
+```
+
+Make it executable:
+```bash
+sudo chmod +x /usr/local/bin/setup-displays.sh
+```
+
+### Step 5: Auto-run Display Setup
+
+```bash
+mkdir -p ~/.config/autostart
+nano ~/.config/autostart/setup-displays.desktop
+```
+
+Add:
+```ini
+[Desktop Entry]
+Type=Application
+Name=Setup Displays
+Exec=/usr/local/bin/setup-displays.sh
+X-GNOME-Autostart-enabled=true
+```
+
+### Step 6: Fix GDM Service Dependencies
+
+This ensures NVIDIA loads before GDM:
+
+```bash
+sudo nano /etc/systemd/system/gdm.service.d/nvidia-wait.conf
+```
+
+Add:
+```ini
+[Unit]
+After=nvidia-persistenced.service
+Wants=nvidia-persistenced.service
+
+[Service]
+# Add delay to ensure NVIDIA is ready
+ExecStartPre=/bin/sleep 3
+```
+
+Create the directory if needed:
+```bash
+sudo mkdir -p /etc/systemd/system/gdm.service.d
+```
+
+Reload systemd:
+```bash
+sudo systemctl daemon-reload
+```
+
+### Step 7: Kernel Boot Parameters
+
+Add NVIDIA-specific boot parameters:
+
+```bash
+sudo nano /etc/default/grub
+```
+
+Find the line `GRUB_CMDLINE_LINUX_DEFAULT` and add:
+```
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash nvidia-drm.modeset=1"
+```
+
+Update GRUB:
+```bash
+sudo update-grub
+```
+
+---
+
+## Complete Fix Script (Run All At Once)
+
+Save this as `fix-nvidia-boot.sh`:
+
+```bash
+#!/bin/bash
+
+echo "=== Fixing NVIDIA Boot Issues ==="
+
+# 1. Add NVIDIA modules to initramfs
+echo "Adding NVIDIA modules to initramfs..."
+cat << EOF | sudo tee -a /etc/initramfs-tools/modules
+nvidia
+nvidia_modeset
+nvidia_uvm
+nvidia_drm
+EOF
+
+# 2. Update Xorg config
+echo "Updating Xorg configuration..."
+sudo cat << 'EOF' > /etc/X11/xorg.conf.d/20-nvidia.conf
+Section "OutputClass"
+    Identifier "nvidia"
+    MatchDriver "nvidia-drm"
+    Driver "nvidia"
+    Option "AllowEmptyInitialConfiguration"
+    Option "PrimaryGPU" "yes"
+    Option "TripleBuffer" "true"
+    Option "Coolbits" "4"
+    ModulePath "/usr/lib/x86_64-linux-gnu/nvidia/xorg"
+EndSection
+
+Section "OutputClass"
+    Identifier "intel"
+    MatchDriver "i915"
+    Driver "modesetting"
+EndSection
+
+Section "ServerLayout"
+    Identifier "layout"
+    Option "AllowNVIDIAGPUScreens"
+EndSection
+EOF
+
+# 3. Create display setup script
+echo "Creating display setup script..."
+sudo cat << 'EOF' > /usr/local/bin/setup-displays.sh
+#!/bin/bash
+sleep 2
+xrandr --setprovideroutputsource modesetting NVIDIA-0
+xrandr --auto
+EOF
+sudo chmod +x /usr/local/bin/setup-displays.sh
+
+# 4. Create autostart entry
+echo "Creating autostart entry..."
+mkdir -p ~/.config/autostart
+cat << 'EOF' > ~/.config/autostart/setup-displays.desktop
+[Desktop Entry]
+Type=Application
+Name=Setup Displays
+Exec=/usr/local/bin/setup-displays.sh
+X-GNOME-Autostart-enabled=true
+EOF
+
+# 5. Add GDM service dependency
+echo "Configuring GDM service..."
+sudo mkdir -p /etc/systemd/system/gdm.service.d
+sudo cat << 'EOF' > /etc/systemd/system/gdm.service.d/nvidia-wait.conf
+[Unit]
+After=nvidia-persistenced.service
+Wants=nvidia-persistenced.service
+
+[Service]
+ExecStartPre=/bin/sleep 3
+EOF
+
+# 6. Update GRUB
+echo "Updating GRUB..."
+sudo sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="[^"]*/& nvidia-drm.modeset=1/' /etc/default/grub
+sudo update-grub
+
+# 7. Rebuild initramfs
+echo "Rebuilding initramfs..."
+sudo update-initramfs -u
+
+# 8. Reload systemd
+echo "Reloading systemd..."
+sudo systemctl daemon-reload
+
+echo ""
+echo "=== FIX COMPLETE ==="
+echo "Please REBOOT your system now: sudo reboot"
+```
+
+Run it:
+```bash
+chmod +x fix-nvidia-boot.sh
+./fix-nvidia-boot.sh
+```
+
+---
+
+## After Reboot - Verify Dual Display
+
+```bash
+# Check both GPUs are active
+xrandr --listproviders
+
+# Should show:
+# Provider 0: NVIDIA-0
+# Provider 1: modesetting (Intel)
+
+# List all displays
+xrandr
+
+# Configure displays manually if needed
+xrandr --output HDMI-0 --primary --auto --output eDP-1 --auto --right-of HDMI-0
+```
+
+---
+
+## If Still Stuck at Boot
+
+**Emergency Recovery:**
+
+1. **At boot, press `Esc` or hold `Shift`** to get GRUB menu
+2. Select **"Advanced options"**
+3. Select **recovery mode**
+4. Choose **"root - Drop to root shell"**
+5. Run:
+```bash
+mount -o remount,rw /
+systemctl disable gdm
+reboot
+```
+
+6. After boot (to terminal), run:
+```bash
+sudo systemctl start gdm
+# If this works, re-enable: sudo systemctl enable gdm
+```
+
+---
+
+## Key Differences from Before
+
+1. ✅ **NVIDIA modules load at boot** (initramfs)
+2. ✅ **GDM waits for NVIDIA** (service dependency)
+3. ✅ **Intel modesetting** for laptop display
+4. ✅ **Automatic display linking** (xrandr provider setup)
+5. ✅ **Kernel parameter** for DRM modeset
+
+**This should completely fix the boot hang!** The dual displays will work automatically after these changes.
+
+Want me to also add the suspend fixes from earlier?
